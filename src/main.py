@@ -1,15 +1,7 @@
 from fastapi import FastAPI
-from src.logger import setup_logger
 from src.config import settings
-
-logger = setup_logger()
+from src.routes.health import router as health_router
 
 app = FastAPI(title=settings.APP_NAME)
 
-@app.get("/health")
-def health_check():
-    logger.info("Health check endpoint called")
-    return {
-        "status": "ok",
-        "app": settings.APP_NAME
-    }
+app.include_router(health_router)
