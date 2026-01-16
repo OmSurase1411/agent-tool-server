@@ -1,129 +1,389 @@
-# FastAPI Backend Template
+# Agent Tool Server
 
-A clean, production-ready FastAPI backend template demonstrating professional Python backend engineering practices.
+An enterprise-style **Agent Tool Server** built with FastAPI that simulates how AI agents interact with real-world backend systems through structured, machine-callable tools.
 
-This project focuses on backend structure, reliability, and maintainability rather than business logic, making it an ideal foundation for scalable APIs and AI-powered systems.
+This project is not just a REST API.
+It is an execution environment for AI agents where each endpoint represents a *capability* an agent can call, reason over, and chain with other tools.
+
+The project evolved in two phases:
+
+* **Week 2** → Backend infrastructure & production-ready architecture
+* **Week 3** → Agent tool execution layer with mock enterprise tools
 
 ---
 
-## Features
+## What is an Agent Tool Server?
 
-- Modular API routing using FastAPI routers  
-- Centralized logging system  
-- Environment-based configuration  
-- Global error handling  
-- Clean project structure  
-- Production hygiene with dependency management  
+An AI agent does not browse websites.
+It calls tools with structured input and receives structured output.
+
+Flow:
+
+```
+Agent → Tool Endpoint → Structured Response → Agent Reasoning → Next Action
+```
+
+This backend provides exactly that mechanism.
+
+All tools follow a unified response contract so that an agent can reason consistently:
+
+```json
+{
+  "tool": "tool_name",
+  "status": "success | error",
+  "input": ...,
+  "output": ...,
+  "message": "optional"
+}
+```
+
+An agent can simply do:
+
+* If `status == "success"` → use `output`
+* If `status == "error"` → read `message` and recover
+
+This is the foundation of agent orchestration.
 
 ---
 
 ## Project Structure
 
+```
 src/
-├── main.py # Application entry point
-├── logger.py # Central logging configuration
-├── config.py # Environment-based settings
-├── errors.py # Global exception handling
-└── routes/
-└── health.py # Health check API
-
-Each file has a clear responsibility:
-
-main.py
-Creates the FastAPI app, registers routers, and sets up error handling.
-
-logger.py
-Defines a single logging configuration used across the entire application.
-
-config.py
-Reads environment variables and provides configuration values.
-
-errors.py
-Handles unexpected errors in a safe and controlled way.
-
-routes/
-Contains all API routes in a modular structure.
+├── main.py            → App entry point, router registration
+├── config.py          → Environment configuration
+├── logger.py          → Central logging system
+├── errors.py          → Global error handling
+├── routes/
+│   ├── health.py      → Infrastructure health check
+│   ├── ping.py        → System sanity check
+│   └── tools.py       → All agent tools
+```
 
 ---
 
-## Why This Structure Matters
+## Infrastructure Endpoints
 
-This backend follows real-world microservice design patterns:
+### Health Check
 
-- **main.py** orchestrates the application.  
-- **routes/** contains modular API logic.  
-- **logger.py** ensures consistent system observability.  
-- **config.py** enables environment-specific deployments.  
-- **errors.py** guarantees controlled failure handling.  
+`GET /health`
 
-This structure scales cleanly as systems grow in complexity.
-
----
-
-## Health Check Endpoint
-GET /health
+Used by infrastructure and monitoring systems.
 
 Response:
 
+```json
 {
-"status": "ok",
-"app": "FastAPI Backend Template"
+  "status": "ok",
+  "app": "Agent Tool Server"
 }
+```
 
-This endpoint is used by infrastructure and monitoring systems to verify service availability.
+---
+
+### Ping
+
+`GET /ping`
+
+Simple logic sanity check.
+
+Response:
+
+```json
+{
+  "message": "pong"
+}
+```
+
+---
+
+## Agent Tools
+
+All agent tools live under:
+
+```
+/tools/*
+```
+
+They are **POST-only** endpoints and are designed for machines (agents), not browsers.
+
+---
+
+### 1. Echo Tool
+
+Utility tool that reflects input.
+
+`POST /tools/echo`
+
+Request:
+
+```json
+{
+  "text": "hello"
+}
+```
+
+Response:
+
+```json
+{
+  "tool": "echo",
+  "status": "success",
+  "input": "hello",
+  "output": "hello",
+  "message": null
+}
+```
+
+---
+
+### 2. Uppercase Tool
+
+Text transformation tool.
+
+`POST /tools/uppercase`
+
+Request:
+
+```json
+{
+  "text": "hello"
+}
+```
+
+Response:
+
+```json
+{
+  "tool": "uppercase",
+  "status": "success",
+  "input": "hello",
+  "output": "HELLO",
+  "message": null
+}
+```
+
+---
+
+### 3. Time Tool (System Tool)
+
+Provides server environment context.
+
+`POST /tools/time`
+
+Request:
+(no body)
+
+Response:
+
+```json
+{
+  "tool": "time",
+  "status": "success",
+  "input": null,
+  "output": "2026-01-14T20:53:12.456789+00:00",
+  "message": null
+}
+```
+
+---
+
+### 4. Customer Lookup Tool (Mock Enterprise)
+
+Simulates a real enterprise customer service.
+
+`POST /tools/customer_lookup`
+
+Request:
+
+```json
+{
+  "customer_id": "CUST123"
+}
+```
+
+Response:
+
+```json
+{
+  "tool": "customer_lookup",
+  "status": "success",
+  "input": "CUST123",
+  "output": {
+    "name": "Rahul Mehta",
+    "email": "rahul@example.com",
+    "status": "Active"
+  },
+  "message": null
+}
+```
+
+Failure:
+
+```json
+{
+  "tool": "customer_lookup",
+  "status": "error",
+  "input": "CUST000",
+  "output": null,
+  "message": "Customer not found"
+}
+```
+
+---
+
+### 5. Vehicle Info Tool (Mock Enterprise)
+
+Simulates a vehicle information system.
+
+`POST /tools/vehicle_info`
+
+Request:
+
+```json
+{
+  "vin": "VIN123"
+}
+```
+
+Response:
+
+```json
+{
+  "tool": "vehicle_info",
+  "status": "success",
+  "input": "VIN123",
+  "output": {
+    "model": "BMW X5",
+    "year": 2023,
+    "status": "In Service"
+  },
+  "message": null
+}
+```
+
+Failure:
+
+```json
+{
+  "tool": "vehicle_info",
+  "status": "error",
+  "input": "VIN000",
+  "output": null,
+  "message": "Vehicle not found"
+}
+```
+
+---
+
+### 6. Add Tool (Math / Reasoning Tool)
+
+Enables numeric computation for agent reasoning.
+
+`POST /tools/add`
+
+Request:
+
+```json
+{
+  "a": 5,
+  "b": 7
+}
+```
+
+Response:
+
+```json
+{
+  "tool": "add",
+  "status": "success",
+  "input": [5, 7],
+  "output": 12,
+  "message": null
+}
+```
+
+---
+
+## Why This Is Agentic
+
+This backend behaves exactly like real agent platforms:
+
+* Tools are atomic
+* Tools are deterministic
+* Tools are machine-callable
+* Tools return structured contracts
+* Tools can be chained
+* Tools simulate enterprise services
+
+An AI agent could:
+
+1. Call `/tools/customer_lookup`
+2. Read customer status
+3. Call `/tools/vehicle_info`
+4. Perform reasoning
+5. Call `/tools/add` or `/tools/time`
+6. Continue decision making
+
+This is a real agent execution loop.
+
 ---
 
 ## Running Locally
 
-Install dependencies
+Install dependencies:
+
+```bash
 pip install -r requirements.txt
+```
 
-Start the server
+Activate virtual environment:
+
+Windows:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+Run server:
+
+```bash
 uvicorn src.main:app --reload
+```
 
-Open in browser
-http://127.0.0.1:8000/health
+Server:
 
-If you see:
+```
+http://127.0.0.1:8000
+```
 
-{
-"status": "ok",
-"app": "FastAPI Backend Template"
-}
+Swagger (for testing):
 
-Then your backend is running correctly.
----
-## Environment Configuration
+```
+http://127.0.0.1:8000/docs
+```
 
-This project uses environment variables to control application behavior without changing code.
+> Note: In production, many tools are hidden from Swagger because they are machine-only endpoints.
 
-Supported variables:
-
-APP_NAME
-Controls the application name shown in logs and API responses.
-
-LOG_LEVEL
-Controls logging verbosity (INFO, DEBUG, WARNING, ERROR).
-
-Example:
-
-export APP_NAME="My Backend Service"
-export LOG_LEVEL="DEBUG"
-
-This approach allows the same code to run in different environments like development, staging, and production.
 ---
 
-## Purpose
+## What This Project Represents
 
-This template is designed as a foundation for:
+This is no longer a FastAPI demo.
 
-Backend systems
+It is:
 
-AI agent orchestration services
+* An **Agent Tool Server**
+* With enterprise-style mock services
+* Unified tool contracts
+* Production-ready backend structure
+* Real-world AI architecture
 
-API platforms
-
-Microservice architectures
-
-It demonstrates professional engineering discipline and production-readiness.
 ---
+
+## Authors
+
+**Om Rameshwar Surase and Nidhi Chaubey**
+Agentic AI & Backend Systems Engineering
+
+
