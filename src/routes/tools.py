@@ -1,6 +1,11 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from src.logger import setup_logger
+from typing import Any, Optional
+from datetime import datetime, timezone
+
+
+
 
 
 router = APIRouter(prefix="/tools", tags=["tools"])
@@ -42,6 +47,13 @@ FAKE_VEHICLES = {
     }
 }
 
+class ToolResponse(BaseModel):
+    tool: str
+    status: str
+    input: Any = None
+    output: Any = None
+    message: Optional [str] | None = None
+
 
 class EchoRequest(BaseModel):
     text: str
@@ -51,12 +63,13 @@ class EchoResponse(BaseModel):
     input: str
     output: str
 
-@router.post("/echo", response_model = EchoResponse)
+@router.post("/echo", response_model = ToolResponse)
 def echo_tool(request: EchoRequest):
     logger.info(f"Echo tool called with input: {request.text}")
 
-    return EchoResponse(
+    return ToolResponse(
         tool = "Echo",
+         status="success",
         input = request.text,
         output = request.text
     )
@@ -71,12 +84,13 @@ class UppercaseResponse(BaseModel):
     input: str
     output: str
 
-@router.post("/uppercase", response_model=UppercaseResponse)
+@router.post("/uppercase", response_model=ToolResponse)
 def uppercase_tool(request: UppercaseRequest):
     logger.info(f"Uppercase tool called with input: {request.text}")
     upper = request.text.upper()
-    return UppercaseResponse(
+    return ToolResponse(
         tool="uppercase",
+        status="success",
         input=request.text,
         output=upper
     )
@@ -91,21 +105,24 @@ class CustomerLookupResponse(BaseModel):
     input: str
     output: dict
 
-@router.post("/customer_lookup", response_model=CustomerLookupResponse)
+@router.post("/customer_lookup", response_model=ToolResponse)
 def customer_lookup_tool(request: CustomerLookupRequest):
     logger.info(f"Customer lookup called for ID: {request.customer_id}")
 
     customer = FAKE_CUSTOMERS.get(request.customer_id)
 
     if not customer:
-        return CustomerLookupResponse(
+        return ToolResponse(
             tool="customer_lookup",
+            status="error",
             input=request.customer_id,
-            output={"error": "Customer not found"}
+            output= None,
+            message="Customer Not Found"
         )
 
-    return CustomerLookupResponse(
+    return ToolResponse(
         tool="customer_lookup",
+        stats="success",
         input=request.customer_id,
         output=customer
     )
@@ -122,21 +139,39 @@ class VehicleInfoResponse(BaseModel):
     output: dict
 
 
-@router.post("/vehicle_info", response_model=VehicleInfoResponse)
+@router.post("/vehicle_info", response_model=ToolResponse)
 def vehicle_info_tool(request: VehicleInfoRequest):
     logger.info(f"Vehicle info lookup called for VIN: {request.vin}")
 
     vehicle = FAKE_VEHICLES.get(request.vin)
 
     if not vehicle:
-        return VehicleInfoResponse(
+        return ToolResponse(
             tool="vehicle_info",
+            status="error",
             input=request.vin,
-            output={"error": "Vehicle not found"}
+            output= None, 
+            message="Vehicle not found"
         )
 
-    return VehicleInfoResponse(
+    return ToolResponse(
         tool="vehicle_info",
+        status="success",
         input=request.vin,
         output=vehicle
+    )
+
+#-------------TIME TOOL_--------------
+@router.post("/time", response_model=ToolResponse)
+def time_tool():
+    now = datetime.now(timezone.utc).isoformat()
+
+    logger.info("Time tool called")
+
+    return ToolResponse(
+        tool="time",
+        status="success",
+        input=None,
+        output=now,
+        message=None
     )
