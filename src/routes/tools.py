@@ -65,7 +65,7 @@ def echo_tool(request: EchoRequest):
     logger.info(f"Echo tool called with input: {request.text}")
 
     return ToolResponse(
-        tool = "Echo",
+        tool = "echo",
          status="success",
         input = request.text,
         output = request.text
@@ -111,7 +111,7 @@ def customer_lookup_tool(request: CustomerLookupRequest):
     if not customer:
         return ToolResponse(
             tool="customer_lookup",
-            status="error",
+            status="failed",
             input=request.customer_id,
             output= None,
             message="Customer Not Found"
@@ -119,7 +119,7 @@ def customer_lookup_tool(request: CustomerLookupRequest):
 
     return ToolResponse(
         tool="customer_lookup",
-        stats="success",
+        status="success",
         input=request.customer_id,
         output=customer
     )
@@ -145,7 +145,7 @@ def vehicle_info_tool(request: VehicleInfoRequest):
     if not vehicle:
         return ToolResponse(
             tool="vehicle_info",
-            status="error",
+            status="failed",
             input=request.vin,
             output= None, 
             message="Vehicle not found"
