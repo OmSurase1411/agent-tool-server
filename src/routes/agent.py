@@ -7,7 +7,23 @@ from src.routes.context_manager import ContextManager
 from src.routes.llm_client import LLMClient
 from src.routes.schemas import AgentResponse
 
+# -------------------------------------------------------------------
+# Tool name normalization (LLM → Backend)
+# -------------------------------------------------------------------
 
+TOOL_ALIASES = {
+    "calculator": "add",
+    "calc": "add",
+    "math": "add",
+
+    "customer finder": "customer_lookup",
+    "customer search": "customer_lookup",
+    "customer lookup": "customer_lookup",
+
+    "vin decoder": "vehicle_info",
+    "vin lookup": "vehicle_info",
+    "vehicle lookup": "vehicle_info",
+}
 
 # -------------------------------------------------------------------
 # Setup
@@ -20,7 +36,6 @@ TOOLS_BASE_URL = "http://localhost:8000/tools"
 context_manager = ContextManager()
 llm_client = LLMClient(model_name="llama3:latest")
 
-
 # -------------------------------------------------------------------
 # Request model
 # -------------------------------------------------------------------
@@ -28,57 +43,57 @@ llm_client = LLMClient(model_name="llama3:latest")
 class AgentRequest(BaseModel):
     text: str | None = ""
 
-
 # -------------------------------------------------------------------
-# Tool execution helpers
+# Tool Executor (Single Source of Truth)
 # -------------------------------------------------------------------
 
-async def call_tool(client: httpx.AsyncClient, tool_name: str, user_text: str):
-    """
-    Maps tool_name decided by the LLM to your real tool endpoints.
-    """
-    if tool_name == "echo":
-        payload = {"text": user_text}
-        r = await client.post(f"{TOOLS_BASE_URL}/echo", json=payload)
-        return r.json()
+async def execute_tool(tool_name: str, user_text: str):
+    async with httpx.AsyncClient() as client:
 
-    elif tool_name == "add":
-        # Expecting the user text to contain numbers
-        import re
-        numbers = list(map(int, re.findall(r"-?\d+", user_text)))
-        payload = {"a": numbers[0], "b": numbers[1]}
-        r = await client.post(f"{TOOLS_BASE_URL}/add", json=payload)
-        return r.json()
+        if tool_name == "echo":
+            r = await client.post(f"{TOOLS_BASE_URL}/echo", json={"text": user_text})
+            return r.json()
 
-    elif tool_name == "customer_lookup":
-        import re
-        match = re.search(r"(cust\d+)", user_text.lower())
-        if not match:
-            return {"status": "failed", "message": "Customer ID not found"}
-        payload = {"customer_id": match.group(1).upper()}
-        r = await client.post(f"{TOOLS_BASE_URL}/customer_lookup", json=payload)
-        return r.json()
+        elif tool_name == "add":
+            import re
+            numbers = list(map(int, re.findall(r"-?\d+", user_text)))
+            r = await client.post(
+                f"{TOOLS_BASE_URL}/add",
+                json={"a": numbers[0], "b": numbers[1]}
+            )
+            return r.json()
 
-    elif tool_name == "vehicle_info":
-        import re
-        match = re.search(r"(vin\d+)", user_text.lower())
-        if not match:
-            return {"status": "failed", "message": "VIN not found"}
-        payload = {"vin": match.group(1).upper()}
-        r = await client.post(f"{TOOLS_BASE_URL}/vehicle_info", json=payload)
-        return r.json()
+        elif tool_name == "customer_lookup":
+            import re
+            match = re.search(r"(cust\d+)", user_text.lower())
+            if not match:
+                return {"error": "Customer ID not found"}
+            r = await client.post(
+                f"{TOOLS_BASE_URL}/customer_lookup",
+                json={"customer_id": match.group(1).upper()}
+            )
+            return r.json()
 
-    elif tool_name == "uppercase":
-        payload = {"text": user_text}
-        r = await client.post(f"{TOOLS_BASE_URL}/uppercase", json=payload)
-        return r.json()
+        elif tool_name == "vehicle_info":
+            import re
+            match = re.search(r"(vin\d+)", user_text.lower())
+            if not match:
+                return {"error": "VIN not found"}
+            r = await client.post(
+                f"{TOOLS_BASE_URL}/vehicle_info",
+                json={"vin": match.group(1).upper()}
+            )
+            return r.json()
 
-    else:
-        return {
-            "status": "failed",
-            "message": f"Unknown tool requested: {tool_name}"
-        }
+        elif tool_name == "uppercase":
+            r = await client.post(
+                f"{TOOLS_BASE_URL}/uppercase",
+                json={"text": user_text}
+            )
+            return r.json()
 
+        else:
+            return {"error": f"Unknown tool: {tool_name}"}
 
 # -------------------------------------------------------------------
 # MCP + LLM governed agent route
@@ -100,7 +115,7 @@ async def run_agent(request: AgentRequest):
     # 2. Call LLM
     raw_response = llm_client.invoke(prompt)
 
-        # TEMP DEBUG
+    # DEBUG
     print("\n====== RAW LLM OUTPUT ======")
     print(raw_response)
     print("====== END RAW OUTPUT ======\n")
@@ -120,19 +135,23 @@ async def run_agent(request: AgentRequest):
     if not agent_decision.tool_called:
         return agent_decision.dict()
 
-    # 5. If LLM requests a tool → execute it
-    async with httpx.AsyncClient() as client:
-        tool_result = await call_tool(
-            client,
-            agent_decision.tool_name,
-            user_text
-        )
+    # 5. Normalize tool name safely
+    tool_name = (
+        agent_decision.tool_name.lower().strip()
+        if agent_decision.tool_name else ""
+    )
 
-    # 6. Return a combined response
+    # Map LLM-friendly names → backend tool names
+    tool_name = TOOL_ALIASES.get(tool_name, tool_name)
+
+    # 6. Execute tool
+    tool_result = await execute_tool(tool_name, user_text)
+
+    # 7. Return combined response (use normalized tool name)
     return {
         "intent": agent_decision.intent,
         "tool_called": True,
-        "tool_name": agent_decision.tool_name,
+        "tool_name": tool_name,              # normalized, canonical name
         "final_response": agent_decision.final_response,
         "tool_result": tool_result
     }
