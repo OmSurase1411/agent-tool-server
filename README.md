@@ -1,389 +1,176 @@
-# Agent Tool Server
+# Agentic AI Tool Server – MCP Governed Agent
 
-An enterprise-style **Agent Tool Server** built with FastAPI that simulates how AI agents interact with real-world backend systems through structured, machine-callable tools.
 
-This project is not just a REST API.
-It is an execution environment for AI agents where each endpoint represents a *capability* an agent can call, reason over, and chain with other tools.
+This project is a fully MCP (Model Context Protocol) governed AI Agent system built using FastAPI and a local LLM (Ollama).
+It demonstrates how to convert an LLM from a chatbot into a deterministic system controller that decides when and how tools should be executed.
 
-The project evolved in two phases:
 
-* **Week 2** → Backend infrastructure & production-ready architecture
-* **Week 3** → Agent tool execution layer with mock enterprise tools
+This repository is part of a 12-week Agentic AI enablement plan.
+Weeks 1–5 focus on protocol design, tool orchestration, and LLM governance.
 
----
-
-## What is an Agent Tool Server?
-
-An AI agent does not browse websites.
-It calls tools with structured input and receives structured output.
-
-Flow:
-
-```
-Agent → Tool Endpoint → Structured Response → Agent Reasoning → Next Action
-```
-
-This backend provides exactly that mechanism.
-
-All tools follow a unified response contract so that an agent can reason consistently:
-
-```json
-{
-  "tool": "tool_name",
-  "status": "success | error",
-  "input": ...,
-  "output": ...,
-  "message": "optional"
-}
-```
-
-An agent can simply do:
-
-* If `status == "success"` → use `output`
-* If `status == "error"` → read `message` and recover
-
-This is the foundation of agent orchestration.
 
 ---
 
-## Project Structure
 
-```
-src/
-├── main.py            → App entry point, router registration
-├── config.py          → Environment configuration
-├── logger.py          → Central logging system
-├── errors.py          → Global error handling
-├── routes/
-│   ├── health.py      → Infrastructure health check
-│   ├── ping.py        → System sanity check
-│   └── tools.py       → All agent tools
-```
+## 🔥 What This Project Does
 
----
 
-## Infrastructure Endpoints
+The agent can:
 
-### Health Check
 
-`GET /health`
+- Understand user intent  
+- Decide whether a tool is required  
+- Call backend tools when needed  
+- Return structured, deterministic responses  
+- Handle user mistakes politely (missing VIN / Customer ID)  
+- Explain concepts when no tool is required  
+- Enforce strict JSON contracts between the LLM and the backend  
 
-Used by infrastructure and monitoring systems.
 
-Response:
+This is not a chatbot.  
+This is a **governed decision-making AI agent**.
 
-```json
-{
-  "status": "ok",
-  "app": "Agent Tool Server"
-}
-```
 
 ---
 
-### Ping
 
-`GET /ping`
+## 🧠 Core Concept: Model Context Protocol (MCP)
 
-Simple logic sanity check.
 
-Response:
+MCP is a strict contract that controls LLM behavior.
+
+
+Every LLM response must follow:
+
 
 ```json
 {
-  "message": "pong"
+  "intent": "string",
+  "tool_called": true or false,
+  "tool_name": "string or null",
+  "final_response": "string"
 }
 ```
+
+
+Rules enforced:
+
+
+- JSON only output  
+- No markdown  
+- No trailing commas  
+- No hallucinated tool names  
+- Only whitelisted tools allowed  
+- `final_response` must always be a non-empty string  
+- Output must be directly parsable by `json.loads()`  
+
+
+This transforms the LLM from a chatbot into a deterministic **decision engine**.
+
+
+## 🛠️ Available Tools
+
+
+| Tool | Description |
+|------|-----------|
+| `add` | Adds two numbers |
+| `echo` | Echoes user input |
+| `customer_lookup` | Fetches customer details |
+| `vehicle_info` | Fetches vehicle details using VIN |
+| `uppercase` | Converts text to uppercase |
+
 
 ---
 
-## Agent Tools
 
-All agent tools live under:
+## 🖥️ Frontend Behavior
 
-```
-/tools/*
-```
 
-They are **POST-only** endpoints and are designed for machines (agents), not browsers.
+The frontend UI:
 
----
 
-### 1. Echo Tool
+- Shows explanations when no tool is needed  
+- Shows explanation + polite correction when IDs are missing  
+- Formats tool results professionally  
+- Never exposes raw JSON or backend errors  
 
-Utility tool that reflects input.
-
-`POST /tools/echo`
-
-Request:
-
-```json
-{
-  "text": "hello"
-}
-```
-
-Response:
-
-```json
-{
-  "tool": "echo",
-  "status": "success",
-  "input": "hello",
-  "output": "hello",
-  "message": null
-}
-```
 
 ---
 
-### 2. Uppercase Tool
 
-Text transformation tool.
+## 🚀 How to Run
 
-`POST /tools/uppercase`
 
-Request:
-
-```json
-{
-  "text": "hello"
-}
-```
-
-Response:
-
-```json
-{
-  "tool": "uppercase",
-  "status": "success",
-  "input": "hello",
-  "output": "HELLO",
-  "message": null
-}
-```
-
----
-
-### 3. Time Tool (System Tool)
-
-Provides server environment context.
-
-`POST /tools/time`
-
-Request:
-(no body)
-
-Response:
-
-```json
-{
-  "tool": "time",
-  "status": "success",
-  "input": null,
-  "output": "2026-01-14T20:53:12.456789+00:00",
-  "message": null
-}
-```
-
----
-
-### 4. Customer Lookup Tool (Mock Enterprise)
-
-Simulates a real enterprise customer service.
-
-`POST /tools/customer_lookup`
-
-Request:
-
-```json
-{
-  "customer_id": "CUST123"
-}
-```
-
-Response:
-
-```json
-{
-  "tool": "customer_lookup",
-  "status": "success",
-  "input": "CUST123",
-  "output": {
-    "name": "Rahul Mehta",
-    "email": "rahul@example.com",
-    "status": "Active"
-  },
-  "message": null
-}
-```
-
-Failure:
-
-```json
-{
-  "tool": "customer_lookup",
-  "status": "error",
-  "input": "CUST000",
-  "output": null,
-  "message": "Customer not found"
-}
-```
-
----
-
-### 5. Vehicle Info Tool (Mock Enterprise)
-
-Simulates a vehicle information system.
-
-`POST /tools/vehicle_info`
-
-Request:
-
-```json
-{
-  "vin": "VIN123"
-}
-```
-
-Response:
-
-```json
-{
-  "tool": "vehicle_info",
-  "status": "success",
-  "input": "VIN123",
-  "output": {
-    "model": "BMW X5",
-    "year": 2023,
-    "status": "In Service"
-  },
-  "message": null
-}
-```
-
-Failure:
-
-```json
-{
-  "tool": "vehicle_info",
-  "status": "error",
-  "input": "VIN000",
-  "output": null,
-  "message": "Vehicle not found"
-}
-```
-
----
-
-### 6. Add Tool (Math / Reasoning Tool)
-
-Enables numeric computation for agent reasoning.
-
-`POST /tools/add`
-
-Request:
-
-```json
-{
-  "a": 5,
-  "b": 7
-}
-```
-
-Response:
-
-```json
-{
-  "tool": "add",
-  "status": "success",
-  "input": [5, 7],
-  "output": 12,
-  "message": null
-}
-```
-
----
-
-## Why This Is Agentic
-
-This backend behaves exactly like real agent platforms:
-
-* Tools are atomic
-* Tools are deterministic
-* Tools are machine-callable
-* Tools return structured contracts
-* Tools can be chained
-* Tools simulate enterprise services
-
-An AI agent could:
-
-1. Call `/tools/customer_lookup`
-2. Read customer status
-3. Call `/tools/vehicle_info`
-4. Perform reasoning
-5. Call `/tools/add` or `/tools/time`
-6. Continue decision making
-
-This is a real agent execution loop.
-
----
-
-## Running Locally
-
-Install dependencies:
-
+1. Start Ollama:
 ```bash
-pip install -r requirements.txt
+ollama serve
 ```
 
-Activate virtual environment:
 
-Windows:
-
-```powershell
-.\venv\Scripts\Activate.ps1
+2. Pull the model:
+```bash
+ollama pull llama3
 ```
 
-Run server:
 
+3. Start backend:
 ```bash
 uvicorn src.main:app --reload
 ```
 
-Server:
 
-```
-http://127.0.0.1:8000
-```
+4. Open frontend:
+Open your HTML file directly in the browser.
 
-Swagger (for testing):
-
-```
-http://127.0.0.1:8000/docs
-```
-
-> Note: In production, many tools are hidden from Swagger because they are machine-only endpoints.
 
 ---
 
-## What This Project Represents
 
-This is no longer a FastAPI demo.
+## 📁 Project Structure
 
-It is:
 
-* An **Agent Tool Server**
-* With enterprise-style mock services
-* Unified tool contracts
-* Production-ready backend structure
-* Real-world AI architecture
+```
+src/
+ ├── routes/
+ │   ├── agent.py
+ │   ├── context_manager.py
+ │   ├── llm_client.py
+ │   ├── schemas.py
+ │   └── tools.py
+docs/
+ ├── MCP.md
+ └── ARCHITECTURE.md
+```
 
 ---
 
-## Authors
 
-**Om Rameshwar Surase and Nidhi Chaubey**
-Agentic AI & Backend Systems Engineering
+## 🧭 Project Status
+
+
+| Week | Focus | Status |
+|------|------|------|
+| Week 1–2 | Tools + FastAPI Foundation | ✅ |
+| Week 3–4 | Rule-Based Agent Logic | ✅ |
+| Week 5 | MCP Governance & LLM Orchestration | ✅ |
+
+---
+
+
+## 🎯 Why This Project Matters
+
+
+This project demonstrates:
+
+
+- Protocol-driven LLM governance  
+- Deterministic agent design  
+- Enterprise-grade AI architecture  
+- Separation between decision and execution  
+- Real-world agent orchestration patterns  
+
+
+This is how modern AI agents are built in production environments.
+
 
 
