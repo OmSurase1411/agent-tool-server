@@ -7,6 +7,11 @@ from src.routes.context_manager import ContextManager
 from src.routes.llm_client import LLMClient
 from src.routes.schemas import AgentResponse
 
+from src.knowledge_base.loader import load_documents
+from src.knowledge_base.chunker import chunk_text
+from src.knowledge_base.retriever import retrieve_chunks
+
+
 # -------------------------------------------------------------------
 # Tool name normalization (LLM → Backend)
 # -------------------------------------------------------------------
@@ -37,11 +42,25 @@ context_manager = ContextManager()
 llm_client = LLMClient(model_name="llama3:latest")
 
 # -------------------------------------------------------------------
+# LOAD KNOWLEDGE BASE (runs once at startup)
+# -------------------------------------------------------------------
+
+docs = load_documents("src/knowledge_base/documents")
+
+ALL_CHUNKS = []
+
+for doc in docs:
+    chunks = chunk_text(doc["content"], doc["filename"])
+    ALL_CHUNKS.extend(chunks)
+
+
+# -------------------------------------------------------------------
 # Request model
 # -------------------------------------------------------------------
 
 class AgentRequest(BaseModel):
     text: str | None = ""
+
 
 # -------------------------------------------------------------------
 # Tool Executor (Single Source of Truth)
@@ -62,6 +81,7 @@ async def execute_tool(tool_name: str, user_text: str):
                 json={"a": numbers[0], "b": numbers[1]}
             )
             return r.json()
+
         elif tool_name == "customer_lookup":
             import re
             match = re.search(r"(cust\d+)", user_text.lower())
@@ -77,7 +97,6 @@ async def execute_tool(tool_name: str, user_text: str):
             )
             return r.json()
 
-
         elif tool_name == "vehicle_info":
             import re
             match = re.search(r"(vin\d+)", user_text.lower())
@@ -92,7 +111,6 @@ async def execute_tool(tool_name: str, user_text: str):
                 json={"vin": match.group(1).upper()}
             )
             return r.json()
-        
 
         elif tool_name == "uppercase":
             r = await client.post(
@@ -103,6 +121,7 @@ async def execute_tool(tool_name: str, user_text: str):
 
         else:
             return {"error": f"Unknown tool: {tool_name}"}
+
 
 # -------------------------------------------------------------------
 # MCP + LLM governed agent route
@@ -118,18 +137,37 @@ async def run_agent(request: AgentRequest):
             "message": "Please provide some text"
         }
 
-    # 1. Build MCP prompt
+    # -------------------------------------------------------------------
+    # RAG STEP (retrieve relevant knowledge)
+    # -------------------------------------------------------------------
+
+    retrieved_chunks = retrieve_chunks(user_text, ALL_CHUNKS)
+
+    context_text = "\n".join([chunk["text"] for chunk in retrieved_chunks])
+
+    # -------------------------------------------------------------------
+    # Build MCP prompt + inject knowledge
+    # -------------------------------------------------------------------
+
     prompt = context_manager.build_prompt(user_text)
 
-    # 2. Call LLM
+    if context_text:
+        prompt += f"\n\nRelevant Knowledge:\n{context_text}"
+
+    # -------------------------------------------------------------------
+    # Call LLM
+    # -------------------------------------------------------------------
+
     raw_response = llm_client.invoke(prompt)
 
-    # DEBUG
     print("\n====== RAW LLM OUTPUT ======")
     print(raw_response)
     print("====== END RAW OUTPUT ======\n")
 
-    # 3. Parse and validate against MCP schema
+    # -------------------------------------------------------------------
+    # Parse response
+    # -------------------------------------------------------------------
+
     try:
         parsed = json.loads(raw_response)
         agent_decision = AgentResponse(**parsed)
@@ -140,27 +178,38 @@ async def run_agent(request: AgentRequest):
             "exception": str(e)
         }
 
-    # 4. If LLM says no tool is required → return directly
+    # -------------------------------------------------------------------
+    # No tool needed → return
+    # -------------------------------------------------------------------
+
     if not agent_decision.tool_called:
         return agent_decision.dict()
 
-    # 5. Normalize tool name safely
+    # -------------------------------------------------------------------
+    # Normalize tool name
+    # -------------------------------------------------------------------
+
     tool_name = (
         agent_decision.tool_name.lower().strip()
         if agent_decision.tool_name else ""
     )
 
-    # Map LLM-friendly names → backend tool names
     tool_name = TOOL_ALIASES.get(tool_name, tool_name)
 
-    # 6. Execute tool
+    # -------------------------------------------------------------------
+    # Execute tool
+    # -------------------------------------------------------------------
+
     tool_result = await execute_tool(tool_name, user_text)
 
-    # 7. Return combined response (use normalized tool name)
+    # -------------------------------------------------------------------
+    # Final response
+    # -------------------------------------------------------------------
+
     return {
         "intent": agent_decision.intent,
         "tool_called": True,
-        "tool_name": tool_name,              # normalized, canonical name
+        "tool_name": tool_name,
         "final_response": agent_decision.final_response,
         "tool_result": tool_result
     }
