@@ -1,49 +1,40 @@
-# Agentic AI Tool Server – MCP Governed Agent
+# 🚀 Agentic AI Tool Server – MCP Governed + RAG-Enabled Agent
 
+This project is a **production-style Agentic AI system** built using **FastAPI** and a local LLM (**Ollama – LLaMA 3**).
 
-This project is a fully MCP (Model Context Protocol) governed AI Agent system built using FastAPI and a local LLM (Ollama).
-It demonstrates how to convert an LLM from a chatbot into a deterministic system controller that decides when and how tools should be executed.
+It demonstrates how to transform an LLM from a **chatbot into a deterministic system controller** using:
 
-
-This repository is part of a 12-week Agentic AI enablement plan.
-Weeks 1–5 focus on protocol design, tool orchestration, and LLM governance.
-
+* Model Context Protocol (MCP)
+* Tool orchestration
+* Retrieval-Augmented Generation (RAG)
+* Enterprise-safe decision logic
 
 ---
 
-
-## 🔥 What This Project Does
-
+# 🔥 What This Project Does
 
 The agent can:
 
+* Understand user intent
+* Decide whether a tool is required
+* Execute backend tools deterministically
+* Answer knowledge-based questions using **RAG (documents)**
+* Return structured JSON responses (MCP enforced)
+* Handle missing inputs gracefully (VIN / Customer ID)
+* Avoid hallucinations through strict governance
 
-- Understand user intent  
-- Decide whether a tool is required  
-- Call backend tools when needed  
-- Return structured, deterministic responses  
-- Handle user mistakes politely (missing VIN / Customer ID)  
-- Explain concepts when no tool is required  
-- Enforce strict JSON contracts between the LLM and the backend  
-
-
-This is not a chatbot.  
-This is a **governed decision-making AI agent**.
-
+> ❌ Not a chatbot
+> ✅ Controlled AI decision system
 
 ---
 
+# 🧠 Core Concept: Model Context Protocol (MCP)
 
-## 🧠 Core Concept: Model Context Protocol (MCP)
+MCP is a strict contract that governs LLM behavior.
 
+Every response must follow:
 
-MCP is a strict contract that controls LLM behavior.
-
-
-Every LLM response must follow:
-
-
-```json
+```json id="z7k8xa"
 {
   "intent": "string",
   "tool_called": true or false,
@@ -52,147 +43,286 @@ Every LLM response must follow:
 }
 ```
 
+### Rules enforced:
 
-Rules enforced:
+* JSON-only output
+* No markdown or extra text
+* No trailing commas
+* Only allowed tool names
+* Deterministic behavior
+* `final_response` must always exist
 
-
-- JSON only output  
-- No markdown  
-- No trailing commas  
-- No hallucinated tool names  
-- Only whitelisted tools allowed  
-- `final_response` must always be a non-empty string  
-- Output must be directly parsable by `json.loads()`  
-
-
-This transforms the LLM from a chatbot into a deterministic **decision engine**.
+👉 This converts the LLM into a **system controller instead of a chatbot**
 
 ---
 
+# 🧠 Week 6: RAG (Knowledge Base Integration)
 
-## 🏗️ System Architecture
+The system integrates a **document-driven knowledge base**.
 
+Instead of relying only on LLM knowledge, the agent retrieves answers from:
+
+* structured policy documents
+* controlled enterprise knowledge
+
+---
+
+## 📁 Knowledge Base
+
+```bash id="wdl8fw"
+src/knowledge_base/
+ ├── documents/
+ │   ├── vehicle_policy.md
+ │   └── customer_support.md
+ ├── loader.py
+ ├── chunker.py
+ ├── retriever.py
+ └── test_rag.py
+```
+
+---
+
+## 🔁 RAG Flow
+
+```text id="7bo4o5"
+User Query
+   ↓
+Document Loader
+   ↓
+Chunking (with metadata)
+   ↓
+Retriever (keyword-based)
+   ↓
+Context Injection
+   ↓
+LLM (MCP controlled)
+   ↓
+Structured JSON Output
+```
+
+---
+
+## 🧠 Behavior
+
+| Query Type         | Behavior               |
+| ------------------ | ---------------------- |
+| Policy / Knowledge | Answer using documents |
+| Action request     | Call tools             |
+| Missing input      | Ask politely           |
+| Unknown            | Safe fallback          |
+
+---
+
+# 🏗️ System Architecture
+
+```text id="z3o4hw"
+User
+ ↓
+Agent Router (/agent/run)
+ ↓
+ContextManager (MCP rules + RAG injection)
+ ↓
+LLM (Ollama)
+ ↓
+Decision JSON
+ ↓
+Tool Execution (if required)
+ ↓
+Final Response
+ ↓
+Frontend
+```
+
+---
+
+# ⚙️ Components
+
+| Component            | Role                           |
+| -------------------- | ------------------------------ |
+| `agent.py`           | Orchestrates RAG + tools + LLM |
+| `context_manager.py` | Enforces MCP rules             |
+| `llm_client.py`      | Handles LLM calls              |
+| `tools.py`           | Deterministic APIs             |
+| `knowledge_base/`    | RAG system                     |
+| `frontend.html`      | UI layer                       |
+
+---
+
+# 🛠️ Available Tools
+
+| Tool            | Description                       |
+| --------------- | --------------------------------- |
+| add             | Adds two numbers                  |
+| echo            | Echoes user input                 |
+| customer_lookup | Fetches customer details          |
+| vehicle_info    | Fetches vehicle details using VIN |
+| uppercase       | Converts text to uppercase        |
+
+---
+
+# 🧪 Example Behavior
+
+### ✅ Knowledge Query (RAG)
+
+**Input:**
 
 ```
-User → MCP Prompt → LLM → JSON Decision → Tool Execution → Unified Response → UI
+Can I access customer data without ID?
 ```
 
+**Output:**
 
-| Component | Role |
-|--------|------|
-| ContextManager | Enforces MCP and controls LLM behavior |
-| LLMClient | Communicates with Ollama |
-| Agent Router | Orchestrates tool decisions |
-| Tools Layer | Deterministic APIs |
-| Frontend | Interprets and formats agent responses |
-
----
-
-
-
-## 🛠️ Available Tools
-
-
-| Tool | Description |
-|------|-----------|
-| `add` | Adds two numbers |
-| `echo` | Echoes user input |
-| `customer_lookup` | Fetches customer details |
-| `vehicle_info` | Fetches vehicle details using VIN |
-| `uppercase` | Converts text to uppercase |
-
+```json id="6m2hrq"
+{
+  "intent": "data_access",
+  "tool_called": false,
+  "tool_name": null,
+  "final_response": "Customer data must be handled according to internal policies..."
+}
+```
 
 ---
 
+### ✅ Tool Execution
 
-## 🖥️ Frontend Behavior
+**Input:**
 
+```
+Add 5 and 10
+```
 
-The frontend UI:
+**Output:**
 
-
-- Shows explanations when no tool is needed  
-- Shows explanation + polite correction when IDs are missing  
-- Formats tool results professionally  
-- Never exposes raw JSON or backend errors  
-
+```json id="zlb3sf"
+{
+  "intent": "calculation",
+  "tool_called": true,
+  "tool_name": "add",
+  "final_response": "Calculating the result."
+}
+```
 
 ---
 
+# 🖥️ Frontend Behavior
 
-## 🚀 How to Run
+The frontend:
 
+* Displays explanations for knowledge queries
+* Formats tool outputs cleanly
+* Handles validation errors
+* Hides raw JSON from users
 
-1. Start Ollama:
-```bash
+---
+
+# 🚀 How to Run
+
+### 1. Start Ollama
+
+```bash id="w19b5p"
 ollama serve
 ```
 
+### 2. Pull model
 
-2. Pull the model:
-```bash
+```bash id="5p7eaq"
 ollama pull llama3
 ```
 
+### 3. Start backend
 
-3. Start backend:
-```bash
+```bash id="h48y1z"
 uvicorn src.main:app --reload
 ```
 
+### 4. Open API Docs
 
-4. Open frontend:
-Open your HTML file directly in the browser.
-
+```
+http://127.0.0.1:8000/docs
+```
 
 ---
 
+# 📁 Project Structure
 
-## 📁 Project Structure
+```bash id="g0hrj3"
+docs/
+ ├── MCP.md
+ └── ARCHITECTURE.md
 
-
-```
 src/
+ ├── knowledge_base/
+ │   ├── documents/
+ │   ├── chunker.py
+ │   ├── loader.py
+ │   ├── retriever.py
+ │   └── test_rag.py
+ │
  ├── routes/
  │   ├── agent.py
  │   ├── context_manager.py
  │   ├── llm_client.py
  │   ├── schemas.py
  │   └── tools.py
-docs/
- ├── MCP.md
- └── ARCHITECTURE.md
+ │
+ ├── config.py
+ ├── errors.py
+ ├── logger.py
+ ├── main.py
+ └── frontend.html
 ```
 
 ---
 
+# 🧭 Project Progress
 
-## 🧭 Project Status
-
-
-| Week | Focus | Status |
-|------|------|------|
-| Week 1–2 | Tools + FastAPI Foundation | ✅ |
-| Week 3–4 | Rule-Based Agent Logic | ✅ |
-| Week 5 | MCP Governance & LLM Orchestration | ✅ |
+| Week     | Focus                     | Status |
+| -------- | ------------------------- | ------ |
+| Week 1–2 | FastAPI + Tools           | ✅      |
+| Week 3–4 | Agent Logic               | ✅      |
+| Week 5   | MCP Governance            | ✅      |
+| Week 6   | RAG Integration           | ✅      |
+| Week 7   | Workflow Automation (n8n) | 🔜     |
 
 ---
 
-
-## 🎯 Why This Project Matters
-
+# 🎯 Why This Project Matters
 
 This project demonstrates:
 
+* Deterministic AI agent design
+* MCP-based LLM governance
+* Tool-based execution systems
+* Knowledge grounding via RAG
+* Separation of:
 
-- Protocol-driven LLM governance  
-- Deterministic agent design  
-- Enterprise-grade AI architecture  
-- Separation between decision and execution  
-- Real-world agent orchestration patterns  
+  * Decision (LLM)
+  * Action (Tools)
+  * Knowledge (RAG)
 
+👉 This reflects **real-world enterprise AI architecture**
 
-This is how modern AI agents are built in production environments.
+---
 
+# 👥 Collaboration
 
+* Branch + Pull Request workflow
+* No direct commits to main
+* Multi-developer contribution
 
+---
+
+# 🚀 Next Steps
+
+* Workflow automation (n8n)
+* Embedding-based retrieval
+* Source attribution
+* Multi-agent systems
+
+---
+
+# ⭐ Final Note
+
+This is not a chatbot.
+
+It is a **controlled, explainable, enterprise-grade AI system**.
